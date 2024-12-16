@@ -1,0 +1,665 @@
+\documentclass[12pt,fleqn,twoside]{report}
+\usepackage{amsthm,amssymb,amsfonts,amsmath}  
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{import}
+\usepackage{mathrsfs}
+\usepackage{color}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage{latexsym,amsmath,amsrefs}
+
+\usepackage{textcomp}
+\usepackage{wrapfig}
+\usepackage{lettrine}
+\usepackage{multicol}
+\makeatother
+\usepackage[toc,page]{appendix}
+\usepackage{apptools}
+
+\usepackage[sc]{mathpazo} % Use the Palatino font
+\usepackage[T1]{fontenc} % Use 8-bit encoding that has 256 glyphs
+\linespread{1.05} % Line spacing - Palatino needs more space between lines
+
+\usepackage{titlesec} % Allows customization of titles
+\titleformat{\section}[hang]{\Large}{\thesection}{1em}{} % Change the look of the section titles
+\titleformat{\subsection}[hang]{\large}{\thesubsection}{1em}{} % Change the look of the subsection titles
+\titleformat{\chapter}[hang]{\huge\scshape}{Chapter \thechapter:}{0.5em}{} % Change the look of the chapter titles
+
+\usepackage[hmarginratio=1:1,top=32mm,columnsep=20pt]{geometry} % Document margins
+\usepackage[small,labelfont=bf,up,textfont=it,up]{caption} % Custom captions under/above floats in tables or figures
+\usepackage{booktabs} % Horizontal rules in tables
+\usepackage{float} % Required for tables and figures in the multi-column environment - they need to be placed in specific locations with the [H] (e.g. \begin{table}[H])
+
+\usepackage{paralist} % Used for the compactitem environment which makes bullet points with less space between them
+
+\newcommand{\tinybullet}{\hspace{3mm}\tiny\raisebox{.5ex}\textbullet\hspace{3mm}}
+
+\usepackage{fancyhdr} % Headers and footers
+\pagestyle{fancy} % All pages have headers and footers
+\fancyhead{} % Blank out the default header
+\fancyfoot{} % Blank out the default footer
+\rfoot{\thepage}
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \renewcommand{\headrulewidth}{0.1pt}
+  \renewcommand{\footrulewidth}{0.1pt}
+}
+
+\setlength{\headheight}{14.5pt}
+
+%% ---------------------------------------------------------------------------
+
+
+\usepackage{tocloft}
+\usepackage{afterpage}
+\renewcommand*\contentsname{Contents}
+
+\usepackage{accents}
+%% ---------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\newtheorem{theorem}{Theorem}
+\newcommand{\bbox}{\rule{5mm}{5mm}}
+\newcommand{\wbox}{\framebox(13,13){}}
+\newcommand{\bbbox}{\rule{5mm}{5mm}}
+\newcommand{\wbbox}{\framebox(13,13){}}
+
+\title{Developing and Analyzing Staggered Designer Multistep Methods}
+\author{Caleb Cramer and Dr. Michelle Ghrist}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\begin{abstract}
+    Multistep methods can provide an efficient way for computers to approximate a solution to a differential equation because they utilize past function values and derivatives. However, requiring more accuracy generally results in worse stability, i.e., more roundoff error. Our research explores staggered multistep methods, which can be applied to linear wave equations; in these methods, the function values and their derivatives are given at interlacing grid locations, which allows for better accuracy and stability than corresponding nonstaggered methods.  
+
+Dahlquist's First Stability Barrier puts a cap on the maximum order of a stable method; we seek to maximize the order while maintaining stability. A stability domain is a picture in the complex plane that shows for which differential equations and stepsizes a given method will give stable solutions. We have analyzed the stability domains of all 3 and 3.5-step methods and are currently examining 4-step methods. Requiring stability gives bounds on the domains of the free parameters; varying the parameters within this domain results in changes in the size and shape of the stability domain, allowing us to produce methods that work better for a given differential equation.  
+\end{abstract}
+
+
+\chapter{Introduction}
+
+\section{Numerical methods}
+Numerical methods are used to approximate solutions to problems for which we may not be able to find exact solutions. We commonly use these types of methods to solve engineering and biological problems such as heat transfer and cell division rates \cite{Bradie}. These methods are generally named after the mathematicians who developed them. One of these methods, called Runge-Kutta methods, are often used because of their reliability and accuracy.  We seek to obtain more accurate results with less computational time; however, these two goals are usually mutually exclusive because obtaining high accuracy typically requires significantly higher computational costs. Multistep methods can allow us greater accuracy with less computational cost, but are limited by their stability.
+
+
+\section{Some basics of numerical analysis}
+We seek to approximate solutions to the general Initial Value Problem 
+\[y'(t) = f(t,y), \; \; y(t_0)=y_0\] 
+by finding a sequence of discrete approximations $y_k \approx y(t_k),$ where $t_k = t_0 + k h$ and $k \in \mathbb{N}$.  Note that the general function $f(t,y)$ gives the derivative or slope of the desired solution $y(t)$.
+
+We define the stepsize to be $h$ which is the distance along the x-axis between each of our approximations. A numerical method consists of an equation to find $y_{n+1}$ by using $\{ y_n, y_{n-1}, y_{n-2}, \ldots \}$; if $y_n$ and $y_{n-1}$ are used, the method is called two-step method. 
+
+\section{Computational cost} 
+The computational cost of a method is typically dictated by the number of function evaluations (evaluations of $f(t,y)$ in this situation) required to obtain an estimate. This is also referred to how "expensive" a function is because it refers to how much RAM and time a method takes to run. We can use the results of this as another way to rank methods.
+
+\section{Accuracy and order} 
+\label{subsec:accuracy}
+Order (which we denote by \textit{p}) relates to the amount of error we can expect in the final estimate ($t=t_{final}$) from using a particular method: 
+\begin{equation}
+    \label{eqn:errorapprox}
+    \textrm{Error} = |y(t_{final})-y_{final}| \approx c h^{p}, 
+\end{equation} 
+where \textit{h} is the stepsize used and $y(t)$ is the exact solution.  Note: The actual error term (which comes from Taylor's Theorem) is $C h^p f^{(p+1)}(\xi)$, where $\xi \in [t_0,t_{final}]$ and $C$ is a constant.
+
+For example, suppose we use a method to find an approximation for two different stepsizes $h$ and $\frac{h}{10}$. For a first-order method ($p=1$), the ratio of the errors in the two estimates will be about $10$, i.e., you need to do about ten times more calculations to be about ten times more accurate. For a second-order method ($p=2$), the ratio of the errors in the two estimates will be about $100=10^2$, i.e.,  doing about ten times more calculations results in an estimate which is about one hundred times more accurate; similarly, a fourth-order method ($p=4$) gives an estimate which is about ten thousand times more accurate for only ten times the computational cost.  We thus see the advantage of using a higher-order method.
+
+Note that because there is a minimum roundoff error when using a computer (termed epsilon, where $\epsilon \approx 10^{-16}$ for double precision) \cite{AG}, there is typically an optimal order with high enough accuracy and a low computational cost to avoid wasting memory and time with unnecessary calculations that do not improve the accuracy of the estimate (sometimes called reaching the ``error floor''). As a broad generality, fourth-order tends to be a reasonably optimal order.
+
+To find the order of a multistep method, we examine the error by using Taylor series expansions. This gives the local truncation error, or the error in taking one step using the method; it is given the name ``truncation error'' because, by necessity, the approximation cannot use the full (infinite) Taylor series but rather a truncated one due to finite computer time.  In order to obtain a better approximation, we can create a numerical method that accounts for more terms in the Taylor series expansion.
+
+We accumulate local truncation error at each step to get the overall error. Since there are $n=\tfrac{t_{final}-t_0}{h}$ steps taken, the power of $h$ in the local truncation error is one higher than the power in the overall error (which dictates the order of the method).
+
+For example, suppose we want to find the order of the two-step Adams-Bashforth method 
+\begin{equation}
+\label{eqn:AB2}
+    y_{n+1} = y_n + \tfrac{h}{2} \left( 3 f_n - f_{n-1} \right), 
+\end{equation} 
+where $f_n=f(t_n, y_n)$.  We find the Taylor series expansion (typically done in Mathematica) of the difference between the exact answer $y\left(t_{n+1}\right)$ and the approximation $y_{n+1}$ about $h=0$ (essentially, about $t=t_n$), recognizing that $f_n = y'(t_n)$:
+\begin{equation*}
+y\left(t_n + h\right) - \left[y(t_n) + \frac{h}{2} \left(3 y'(t_n) - y'(t_n - h)\right)\right] = \frac{5}{12}h^3 y^{(3)}(t_n)+O[h^4].
+ \end{equation*}
+
+Using Taylor's Theorem, this last expression is equal to $\frac{5}{12}h^3 y^{(3)}(\xi)$, for some $\xi \in [t_n, t_{n+1}]$; this is the local truncation error. Therefore, the accumulated global error is proportional to $h^2$, and the method (\ref{eqn:AB2}) is second-order; this method is typically referred to as second-order Adams-Bashforth, or AB2 for short.
+
+Because the error term contains $y^{(3)}(\xi)$, we note that this method is exact (i.e., has no error) for all solutions $y(t)$ that are polynomials of degree less than two.  In essence, numerical methods are typically constructed to be exact for as high of degree polynomial as possible, which corresponds to being as high of order as possible.
+
+\section{Multistep methods}
+\label{sec:multistep}
+Multistep methods are a large category of numerical methods; commonly used multistep families include the Adams-Bashforth, Adams-Moulton, and backwards-differentiation methods.  
+
+A general $m$-step multistep method is given by
+\[ y_{n+1}=a_1 y_n+a_2 y_{n-1}+\cdots +a_m y_{n+1-m} + h \left[ b_0 f_{n+1}+b_1 f_n+\cdots + b_m f_{n+1-m} \right], \]
+where $f_n = f(t_n, y_n)$ approximates the slope of the solution $y(t)$ at $t=t_n$.  Note that this general $m$-step method has $2m+1$ parameters $\{a_k, b_k\}.$
+
+For example, a $4$-step method requires four values, $y_n$, $y_{n-1}$, $y_{n-2}$, and $y_{n-3}$, to advance the approximation from $t=t_n$ to $t=t_{n+1}$. 
+
+If $b_0 = 0$, the method is called {\em explicit}, while if $b_0 \neq 0$, the method is called {\em implicit}.  In the latter case, the presence of the term $b_0 f_{n+1}$ typically necessitates the use of a rootfinding method (for nonlinear differential equations) to approximate the unknown $y_{n+1}$ as we must solve a nonlinear equation at each time step.  In this paper, we only consider explicit multistep methods, but exploring implicit methods is a future consideration.
+
+One disadvantage of multistep methods is that you need to use a one-step method (typically Runge-Kutta) to take the first few steps, until there are enough values in the sequence to begin using the multistep method, which is then used for all subsequent calculations.  As long as this one-step method has order no less than that of the multistep method, the multistep method should perform as expected, especially if the fraction of steps that use the one-step method is fairly small.  Note that if you use a method of lower-order to start (e.g., Euler's method), your multistep method will typically perform at that lower order.
+
+
+\subsection{Stencils}
+\label{subsec:circles}
+Squares represent the $y(t)$ values and the circles represent the $y'(t)$. The top level is $(t+h)$ where $h$ is the stepsize. Therefore, a square at the top level would represent $y(t+h)$. Then each level down would be subtract $h$. The second level square would be $y(t)$ and so on. This allows us to quickly discover the number of steps for a method as well as its order.
+
+\subsection{Staggered Methods}
+\label{subsec:staggered}
+A staggered multistep method utilizes smaller steps between the each of the levels to achieve more accurate results with the same amount of computational cost. The equation for a general k-step staggered method is 
+\begin{equation*}
+    y_{n+1} = a_1 y_n+a_2 y_{n-1/2}+\cdots +a_k y_{n+1-k} + h \left[ b_0 f_{n+1/2}+b_1 f_{n-1/2}+\cdots + b_k f_{n+1-k} \right]
+\end{equation*}
+The difference between staggered and a "normal" ODE can be seen in the following stencils for Adams-Bashforth 3 and its staggered equivalent. 
+\begin{center}
+
+\vspace{5mm}
+
+\begin{picture}(300,100)
+
+    	\put(20,80){\wbbox}
+    	\put(20,60){\bbbox}
+    	\put(50,67){\circle*{13}}
+    	\put(50,47){\circle*{13}}
+    	\put(50,27){\circle*{13}}
+    	\put(35,0){\makebox(5,5)[b]{$_{AB3}$}}
+
+    	
+    	\put(240,80){\wbbox}
+    	\put(240,60){\bbbox}
+    	\put(270,78){\circle*{13}}
+    	\put(270,58){\circle*{13}}
+    	\put(270,38){\circle*{13}}
+    	\put(255,0){\makebox(5,5)[b]{$_{staggered \ AB3}$}}
+    	
+    	
+    	\put(-15,70){\vector(0,1){21}}
+    	\put(-15,95){\makebox(3,3)[b]{$t$}}
+    \end{picture} 
+    
+    \begin{multicols}{2}
+    $$\rho(z) = z^3 + a_1z^2$$
+    $$\sigma(z) = b_0z^2 +b_1z + b_2$$
+    $$y_{n+1} = a_1y_n + h\left[b_0f_n + b_1f_{n-1} +b_2f_{n-2}\right]$$
+    
+    \columnbreak
+    
+    $$\rho(z) = z^3+a_1z^2$$
+    $$\sigma(z) = b_1z^{5/2}+b_2z^{3/2}+b_3z^{1/2}$$
+    $$y_{n+1} = a_1y_n + h\left[b_0f_{n+1/2} + b_1f_{n-1/2} +b_2f_{n-3/2}\right]$$
+    \end{multicols}
+
+    
+    
+    
+    
+\end{center}
+
+
+
+
+
+
+
+\section{Stability} 
+\label{subsec:stability}
+Stability is an important but often overlooked desirable property for numerical methods. A numerical method for differential equations is stable if roundoff error does not grow in subsequent calculations (as $n$ increases).  An unstable numerical method gives unusable results. 
+
+This shows how one might observe an unstable approximation. The graph shows the result of using Euler's method to approximate the solution to an IVP with exact solution $y(t)=\cos(t)$; however, the approximation has a growing amplitude rather than one due to roundoff error growing (exponentially).  While there are other important kinds of error to consider such as truncation error (addressed in the previous section) and dispersion error, the goal of stability is to prevent roundoff error from growing as we take subsequent steps.
+
+\hspace{2pt}
+    % \begin{figure}[hbt]
+    %   \centering
+    %   \includegraphics[scale=0.6]{UnstableEuler.eps}
+    %   \caption{The solution should be $y(t)=\cos(t)$, but the approximation has increasing amplitude.  Roundoff error grows exponentially because Euler's method is unstable for this problem, no matter what stepsize $h$ is used.  See Section~\ref{sec:Euler} for further explanation.}
+    %     \label{fig:roundoff}
+    % \end{figure}
+
+To test to see if a multistep method is stable, we apply the ``Root Test''.  Using the test differential equation $y'=0$ (which has constant solution $y(t)=C$), we substitute $f(t,y)=0$ into the method, giving a linear (homogeneous) difference equation in $y_n$ to solve.  We solve such equations via the substitution $y_n=r^n$, which gives a polynomial in $r$, which we then solve for all roots $r$. 
+
+To form the general solution $y_n$ to the linear difference equation, we need to have as many linearly independent solutions to the difference equation as the degree of the polynomial (not counting zero roots).  For simple real roots, solutions take the form of $r^n$. For complex roots $r=R e^{i \theta}$ (which have (complex) magnitude $|r|=R$), the solutions are given by $R^n \cos{\!\left(n \theta \right)}$ and $R^n \sin{\!\left(n \theta\right)}$ through using Euler's Identity.  For repeated roots $r$ of multiplicity $m$, the solutions are $r^n, n r^n, n^2 r^n, \ldots, n^{(m-1)} r^n$.
+
+The general solution to the linear difference equation is found by taking a linear combination of all solutions; if we have enough initial conditions, we can solve for the coefficients of the linear combination.  Note that all of this parallels solving linear homogeneous differential equations.  
+
+For our analysis, one of the roots will always be $r=1$, but if any of the roots have magnitude greater than 1, then the method is unstable for the differential equation because any roundoff error will grow (exponentially). If any roots with magnitude 1 are not simple roots, then the magnitude of the roots will grow (slower than exponentially) in $n$, which is still unstable (but not quite as bad). In any event, an unstable method is considered to be useless.
+
+So, for a method to be stable (i.e., no growing solutions to the test ODE as $n$ increases), the Root Test says  that
+\begin{enumerate}
+    \item all roots $r$ must satisfy $|r| \leq 1$, and 
+    \item any roots with $|r|=1$ must be simple roots.  
+\end{enumerate}
+
+As an example, we test AB2 (\ref{eqn:AB2}) for stability.  We use $f_n = 0$ to obtain the relatively simple linear difference equation $y_{n+1} = y_n$.  We solve via substituting $y_n = r^n$ to find $r^{n+1} = r^n$, which has only one nonzero root: $r=1$; as this satisfies the Root Test, this method is stable.  Note that the general solution to this linear difference equation is the general linear combination of all solutions $y_n = A\cdot 1^n = A$.  As this solution does not grow as $n$ grows (in fact, it exactly matches the true solution of the test ODE $y'=0$), the method is stable. 
+
+Note: all Adams-Bashforth, Adams-Moulton, and explicit Runge-Kutta methods have the same difference equation and are thus stable.
+
+\subsection{Dahlquist's First Stability Barrier} 
+\label{subsec:Dahl}
+Dahlquist's First Stability Barrier places an upper bound limit on the order of an stable method.
+In \cite{Dahl}, Dahlquist proved that for an $m$-step method to be stable, its order $p$ must satisfy
+\begin{equation*}
+p \le  \left\{ \begin{tabular}{ccl}
+     $m$,  & explicit method \\
+     $m + 1$,  & implicit method , $m$ odd\\
+     $m + 2$,  & implicit method , $m$ even. \end{tabular} \right. 
+\end{equation*}
+
+Dahlquist's Stability Barrier is important for this project as it gives us insight to the highest order we can possibly use to obtain a stable multistep method. For example, if we look at the general explicit $3$-step method 
+\[y_{n+1} + a_1 y_n + a_2 y_{n-1}+a_3 y_{n-2} = h \left( b_1 f_n + b_2 f_{n-1}+ b_3 f_{n-2} \right),\] 
+the highest order we could possibly obtain is fifth-order because there are 6 unknown coefficients. 
+
+However, this method has $m=3$, so any order $p>3$ will not satisfy the above inequality; the only possible explicit stable methods must have order $p \le 3$. While we do not need to analyze any fourth or fifth-order methods because we know they will be unstable, we choose to directly verify that all fifth and fourth-order explicit $3$-step methods are unstable later.
+
+\subsection{Stability domains}
+\label{subsec:stabdom}
+Stability domains (or regions of absolute stability) are pictures that tell us for what problems a particular numerical method will be stable.  These pictures consist of a subset of the complex plane depicting $\lambda h$, where $ \lambda$ is the eigenvalue of a differential equation (or largest magnitude eigenvalue of a (linearized) system of differential equations), and $h$ is the stepsize used. Therefore, stability domains depend on three things: the numerical method, the particular problem you are trying to solve, and the stepsize that you choose to use. If we chose to use an $h$-value for a particular problem which makes $ \lambda h$ not inside the stability domain, we expect to find an unstable (i.e., unusable) approximation such as that shown below.
+
+To find a stability domain, we use the (linearized) test IVP 
+\[\frac{dy}{dt} = \lambda y, \hspace{0.1in} y(0)=y_0,\]
+which has solution $y(t)=y_0 e^{\lambda t}$.  
+\begin{itemize}
+    \item If $\lambda$ is real, the exact solution will grow or decay exponentially. 
+    \item If $\lambda = i \theta$ is imaginary, the solution will be purely oscillatory, as Euler's Identity gives $y(t) = y_0e^{i \theta t} = y_0 \left( \cos{\left(\theta t\right)} + i\sin{\left(\theta t\right)} \right)$.  
+    \item If $\lambda = \alpha + i \beta$ is complex, we expect to see oscillatory solutions with growing or decaying amplitudes, as applying Euler's Identity gives the exact solution $y(t) = y_0 e^{\alpha t}\left(\cos{\!(\beta t)} + i\sin{\!(\beta t)}\right)$. 
+\end{itemize}
+    Therefore, by analyzing different portions of the stability domain, we can tell for what types of differential equations a particular method will be stable (as long as $h$ is chosen appropriately).
+
+To create a stability domain, we use $f(t,y)=\lambda y$ in the numerical method and then make the substitution $z = \lambda h$.  This gives a linear difference equation in $y_n$.  The stability domain consists of all values of $z$ for which this difference equation satisfies the Root Test discussed above, meaning that we are studying the roots of a polynomial in $r$ for each complex value of $z$.
+ 
+We typically plot the boundary of the stability domain in the complex $z$-plane.  We know that the origin is on the boundary of the stability domain (as the method is stable there with one root $r=1$); it turns out that locally, this boundary cuts through the origin vertically \cites{MG,MG2}.  We then follow this curve, finding all locations where this root satisfies $|r|=1$. In practice, this means that we set $r=e^{i \theta}$ (which has magnitude $1$) and follow this curve as $\theta$ increases; typically we only need to examine $0 \le \theta \le 2 \pi$ to capture the entire boundary.  
+
+Because this polynomial in $r$ potentially has other roots (for methods other than Runge-Kutta and Adams methods), we may find that while the root that we followed has magnitude $1$ for a given $\theta$, another root of the polynomial causes us to violate the Root Test at that value of $z$, meaning that certain portions of this boundary need to be discarded; this typically manifests itself as spurious loops in the stability domain boundary in the right half-plane.
+
+After we have plotted the boundary of the stability domain, we can verify that the actual stability domain for explicit methods consists of the entire region inside this boundary (apart from spurious loops) by applying the Root Test for various values of $z$ in different parts of the complex plane.  We should find that at most one side of the boundary is part of the stability domain (which is how we know that something is unusual for loops).
+
+Note that some implicit methods such as the backwards-differentiation methods have stability domains consisting of the entire region {\em outside} the boundary curve.  Occasionally, a method's stability region consists of just a curve; for example, the leapfrog method has stability domain consisting of just the portion of the imaginary axis along $[-i,i]$.
+
+As an example, we apply the previously described process to AB2 (\ref{eqn:AB2}).  We use $f_n = \lambda y_n$ to find the linear difference equation 
+\[y_{n+1} = y_n + \tfrac{\lambda h}{2} \left( 3y_n-y_{n-1} \right). \]
+We let $z=\lambda h$ and solve this difference equation via substituting $y_n = r^n$ to find (after dividing by $r^n$) 
+\[r^2 = r + \tfrac{z}{2} \left( 3r-1 \right). \] 
+
+The stability domain consists of all values of $z$ such that the (two) roots of this quadratic equation satisfy the Root Test. In this case, we can solve for $z$ to find 
+\[z=\frac{2r(r-1)}{3r-1}. \]
+To find the boundary of the stability domain, we plot this curve using $r=e^{i \theta}$ (i.e., where we have magnitude 1) for  $0 \le \theta \le 2 \pi$, creating the red curve below. 
+ 
+% \begin{figure}[htb]
+%   \centering
+%  \includegraphics[scale=0.65]{ABDomainsGraph.eps}
+%   \caption{AB stability domains ($1^{st}$-order: blue, $2^{nd}$-order: red, $3^{rd}$-order: green, $4^{th}$-order: pink).  The region inside each curve is the stability domain for each method, minus the loops for AB4.}
+%   \label{fig:ABstabdom}
+% \end{figure}
+
+% \begin{figure}[htb]
+%   \centering
+% \includegraphics[scale=0.7]{RKDomainsGraph.eps}
+%   \caption{Boundaries of stability domains ($1^{st}$-order: blue, $2^{nd}$-order: red, 
+%   $3^{rd}$-order: green, $4^{th}$-order: pink). The region inside each curve is the stability domain for each method.}
+%   \label{fig:RKstabdom}
+% \end{figure}
+
+These graphs show the stability domains for Adams-Bashforth and Runge-Kutta methods of orders $1\textrm{--}4$; note the difference in scale between the two pictures.  Here, the stability domains consist of the regions inside the boundary curves shown.  Note the differences in scale and that the blue curves are the same, as both first-order methods are equivalent to Euler's method.  
+
+ Only some of the stability domains include portions of the imaginary axis (in this case, for orders $p=3$ and $4$ for both categories of methods).  Also, stability domains can either grow (as in the Runge-Kutta methods) or shrink (as in the Adams-Bashforth methods) as the order increases.  Despite the more computational cost required, RK3 and RK4 methods are very popular all-purpose methods for use in real world applications due to their reasonably high order, the relatively large size of the stability domains, and the fact that the stability domains include part of the imaginary-axis coverage.
+ 
+ Note the extra loops in the right-half plane for AB4; these are not actually part of the stability domain boundary as both the insides and outsides of the loops (as well as along the boundary loops themselves) are unstable.
+ 
+ We used a MATLAB script to graph these stability domains; Appendix \ref{ch:tech} gives a listing of all MATLAB and Mathematica code that was created for this project.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Problem 1}
+
+\label{chap: P1}
+    \begin{picture}(50,50)
+    	\put(0,40){\wbbox}
+    	\put(0,20){\bbbox}
+    	\put(0,0){\bbbox}
+    	\put(30,37){\circle*{13}}
+    	\put(30,17){\circle*{13}}
+    \end{picture}
+
+\vspace{5mm}
+We begin by studying the 3-step method illustrated above. To find a linear system with parameters $a_1, a_2, b_1,$ and $b_2$, we take a Taylor series expansion of the local truncation error in powers of $h$ about $h=0$, which corresponds to taking one step, from $t=t_n$ to $t=t_{n+1}$.  Because error is the difference between the exact value and the approximation, we expand $y(t_{n+1})-y_{n+1}$.  
+While we could do this expansion by hand, Mathematica's Series command simplifies this calculation (see Appendix \ref{ch:tech}).  Expanding 
+\[y(t_n+h)-\left[ a_1 y(t_n)+a_2 y(t_n-h)+h \left(b_1 y'(t_n + h/2)+b_2 y'(t_n-h/2) \right) \right]\] 
+about $t=t_n$ (or $h=0$) out to the $h^4$ term gives  
+\begin{multline}
+\label{eqn:Taylorexpansion}
+\left(1-a_1-a_2\right)y(t_n) + h \left(1+a_2-b_1-b_2\right) y'(t_n)
++ \frac{h^2}{2}\left(-1+a_2+b_1-b_2\right) y''(t_n)\\
++\frac{h^3}{24} \left(4+4a_2-3b_1-3b_2\right) y'''(t_n) + \frac{h^4}{48}\left(2-2a_2-b_1+b_2\right) y^{(4)}(t_n) + O(h^5)
+\end{multline}
+
+The first nonzero term of this expansion is the (local truncation) error of the method; to make the method as high of order as possible, we set successive terms equal to zero.  Because we have three parameters, we can set the first three terms equal to 0, giving a system of linear equations to solve for the parameters $a_1, b_1,$ and $b_2$ in terms of $a_2$:
+\begin{eqnarray}
+\label{eqn:sys1} 1-a_1-a_2&=&0\\
+\label{eqn:sys2} 1+a_2-b_1-b_2&=&0\\
+\label{eqn:sys3} -1+a_2+b_1-b_2&=&0
+\end{eqnarray}
+
+Equations \ref{eqn:sys1}-\ref{eqn:sys3} result in the unique solution, $a_1 = 1 - a_2, a_2 = a_2, b_1 = 1, b_2 = a_2$. Note that staggered AB2 has $a_2 = 0$. This results in a final multistep equation 
+
+\begin{equation}
+\label{eqn:2square}
+    y_{n+1} = (1-a_2)y_n + a_2y_{n-1} +h(1f_{n+\frac{1}{2}}+a_2f_{n-\frac{1}{2}})
+\end{equation}
+
+\section{Stability}
+\label{sec:stability1}
+We test the method given by (\ref{eqn:2square}) by using $f_n = 0$ and $y_n = r^n$, giving the polynomial 
+\[r^2 + (1-a_2) r+a_2 =0,\] 
+which has roots $r = \{1, -a_2\}$. The Root Test requires that no roots have magnitude greater than 1, and all roots with magnitude 1 must be simple roots for stability.  Therefore, we find that this second-order one-parameter family of methods is stable for $-1 < a_2 \leq 1$.
+
+\section{Error}
+By utilizing the results of the equations \ref{eqn:sys1}-\ref{eqn:sys3} and \ref{eqn:Taylorexpansion}, we can derive the following formulas for error as defined in Equation \ref{eqn:errorapprox}.
+$$\textbf{Local Error:} \hspace{2mm} \tfrac{1+a_2}{24} y'''(\xi_n) h^3 $$
+$$\textbf{Global Error:}\hspace{2mm} \tfrac{1+a_2}{24} y'''(\xi) \left(t_{final}-t_0\right)h^2$$
+
+This global error is what we are further examining later on in Section \ref{subsec:testODE}. Since the domain is $-1< a_2 \leq 1$, it would appear we can drive the error to zero for $\lim_{a_2\to-1}$. We sought to explore this possibility with a sample ODE.
+
+\section{Stability Domain}
+    The results from Section \ref{sec:stability1} show this method is stable for $-1 < a_2 \leq 1$. We can then create stability domains for values of $a_2$ within that range to see how the method behaves (see Figure \ref{fig:P1 Stability Domains}).
+    \begin{figure}[htb]
+        \includegraphics[scale=0.5]{images/smolgraphs.pdf}
+        \caption{Stability Domains for Problem 1 for $-0.9 < a_2 \leq 0.9$}
+        \label{fig:P1 Stability Domains}    
+    \end{figure}
+    
+This boundary can be graphed on the imaginary and real axes with the following equation which is formally proven in Appendix \ref{ch:proofs}.
+
+\begin{equation}
+\label{eqn:p1isb}
+    z = 2i\sin(\tfrac{t}{2})
+\end{equation}
+
+
+
+\section{Test ODE}
+\label{subsec:testODE}
+
+\subsection{Theory}
+Because of the interesting results in Chapter \ref{chap: P1}, we wanted to explore the possibility of forcing error to 0 as the free parameter approached the theoretical limit of -1. To do this, we made a potential real world application of the method and tested its behavior. We chose the ODE $y'' = -4y, y(0)=1, y'(0)=0$ because of its simple, oscillatory solution, $y = \cos(2t)$.
+
+\subsection{Process}
+In order to get the initial data to start the method, we utilized a custom RK3 method and with a step size of half the method's. This gave us double the data we needed and then we were able to choose exactly which points we needed in order to get the method to start. From that point on, the method stepped through a complex mesh of the function and derivative values.
+
+\subsection{Results}
+
+We were able to confidently reproduce the previously determine fact that Problem 1 is a second order method.
+
+\begin{center}
+\begin{tabular}{ |c|c|c| } 
+\label{table:ratios}
+ h Values & Absolute Error & Error Ratios \\ [0.5ex] 
+ \hline\hline
+ \hline
+ 0.1 & 0.03061 & NA\\ 
+ 0.01 & 3.0355e-4 & 100.8585\\ 
+ 0.001 & 3.0163e-6 & 100.6365\\ 
+ 0.0001 & 3.0397e-8 & 99.2303\\ 
+ 0.00001 & 3.0174e-10 & 100.7405\\ 
+ 0.000001 & 1.3368e-12 & 225.7141\\ 
+ \hline
+\end{tabular}
+\end{center}
+
+Unfortunately, we have run into roundoff error as the error gets closer and closer to 0. \\
+    \begin{figure}[htbp]
+        \includegraphics[width = \textwidth]{images/TestODErounding.jpg}
+        \caption{Roundoff Error for $a_2 = 0.9$}
+        \label{fig:pos roundoff}    
+    \end{figure}
+    
+We also have a strange phenomena where the absolute error is actually higher than the error bound for $a_2 < 0$. We are currently hypothesizing that our error bound may not account for the initial error in the first RK3 approximation.\\
+    \begin{figure}[htbp]
+        \includegraphics[width = \textwidth]{images/baderror.jpg}
+        \caption{Roundoff Error for $a_2 = -0.9$}
+        \label{fig:neg roundoff}    
+    \end{figure}
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Problem 2}
+\label{chap:P2}
+
+\begin{picture}(50,50)
+    \put(0,43){\wbbox}
+    \put(0,23){\bbbox}
+    \put(0,3){\bbbox}
+    \put(30,40){\circle*{13}}
+    \put(30,20){\circle*{13}}
+    \put(30,0){\circle*{13}}
+\end{picture}
+
+\vspace{5mm}
+We solve this problem with the same process as the previous chapter \ref{chap: P1} with the notable difference being this is a 3.5-step method. We choose $a_2$ to be the free parameter again which allows us to recover ABS3 when $a_2 = 0$. \\
+
+
+After completing the Taylor Expansion and solving the linear system, analogous to chapter \ref{chap: P1}, we find the unique solution is $a_1 = 1-a_2, a_2 = a_2, b_1 = \frac{25+a_2}{24}, b_2 = \frac{-1+11a_2}{12}, b_3 = \frac{1+a_2}{24}$. Note that ABS3 has $a_2 = 0$ and can be verified in Dr. Ghrist's paper \cite{MG2}. The corresponding multistep equation is
+
+\begin{equation}
+\begin{aligned}
+y_{n+1} = & (1-a_2) y_n + a_2 y_{n-1} \\
+        &+ h\left[\left(\tfrac{25+a_2}{24}\right)f_{n+3/2}+ (\tfrac{-1+11a_2}{12})f_{n+1/2}+(\tfrac{1+a_2}{24})f_{n-1/2}\right]
+\end{aligned}
+\end{equation}
+
+
+
+\section{Stability}
+
+With the free parameter of $a_2$:
+$$a_1 = 1-a_2$$
+$$a_2 = a_2$$ 
+$$b_1 = \frac{25+a_2}{24}$$ 
+$$b_2 = \frac{-1+11a_2}{12}$$
+$$b_3 = \frac{1+a_2}{24}$$ 
+
+\begin{equation}
+\begin{aligned}
+y_{n+1} = & (1-a_2) y_n + a_2 y_{n-1} \\
+        &+ h\left[\left(\tfrac{25+a_2}{24}\right)f_{n+3/2}+ (\tfrac{-1+11a_2}{12})f_{n+1/2}+(\tfrac{1+a_2}{24})f_{n-1/2}\right]
+\end{aligned}
+\end{equation}
+
+\section{Error}
+By applying the same process as Problem 1, we derive the global error and see this is a third order method.
+$$\textbf{Global Error:} \tfrac{1}{24} y^{(4)}(\xi)$$
+
+\section{Stability Domain}
+We apply theory to find this method is also stable for $-1 < a_2 \le 1$.\\
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[scale=.38]{images/graphs2.jpeg}
+    \caption{Stability Domains for Problem 2 for $-0.9 < a_2 \leq 0.9$}
+\end{figure}
+We can describe how far along the imaginary axis the stability domain will extend with the following formula
+\begin{center}
+z = $\tfrac{12i (-1 + a_2)}{-7 + 5 a_2}$
+\end{center}
+
+
+
+$$\rho(r)=r^{2} - a_1r - a_2$$
+$$\sigma(r)= b_1r^{3/2} - b_2r^{1/2} - b_3^{-1/2}$$
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Rest of Work}
+
+\begin{picture}(60,60)
+    \put(0,60){\wbbox}
+    \put(0,40){\bbbox}
+    \put(0,20){\bbbox}
+    \put(0,0){\bbbox}
+    \put(30,57){\circle*{13}}
+    \put(30,37){\circle*{13}}
+    \put(30,17){\circle*{13}}
+\end{picture}
+
+\vspace{5mm}
+
+This is a 4-step method
+
+$$\rho(r)=r^{3} - a_1r^{2} - a_2r - a_3$$
+$$\sigma(r)= b_1r^{5/2} + b_2r^{3/2} + b_3^{1/2}$$
+
+We choose the free parameter here to be $b_3$ since $a_3$ is always 1: 
+$$a_1 = 27-24b_3$$
+$$a_2 = -27+24b_3$$ 
+$$a_3 =1$$
+$$b_1 = b_3$$ 
+$$b_2 = -24+22b_3$$
+$$b_3 = b_3$$ 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Conclusion}
+\section{Conclusions}
+
+\section{Results}
+
+\section{Future Work}
+Future work includes:
+\begin{enumerate}
+    \item analysis of error on the rest of the Problems,
+    \item using the Test ODE to see real world error for Problems 2 and 3,
+    \item adding more free parameters (and steps) to increase the order of the method,
+\end{enumerate}
+
+
+
+\begin{thebibliography}{}
+%
+% and use \bibitem to create references. Consult the Instructions
+% for authors for reference list style.
+%
+%\bibitem{RefJ}
+% Format for Journal Reference
+%Author, Article title, Journal, Volume, page numbers (year)
+% Format for books
+%\bibitem{RefB}
+%Author, Book title, page numbers. Publisher, place (year)
+% etc
+
+% NEED OTHER GHRIST WORK? AND STAGGEREDTIMESIAM PAPER?
+
+\bibitem{AG}
+Ascher, U. M., and Greif C.: A First Course in Numerical Methods. Society for Industrial and Applied Mathematics, Pennsylvania (2011).
+
+\bibitem{Bradie} 
+Bradie, B.: A Friendly Introduction to Numerical Analysis. Pearson Education Inc., New Jersey (2006).
+
+\bibitem{Dahl}
+Dahlquist, G.: Convergence and Stability in the Numerical Integration of Ordinary Differential Equations. Mathematica Scandinavica, 4(1) (1956), 33-53. 
+
+% help here?
+\bibitem{Alana}
+Dillinger, A.: Designer Multistep Methods for Approximating Solutions to Differential Equations. (2020)
+
+\bibitem{MG2}
+Ghrist, M., Driscoll, T.A., and Fornberg, B.: Staggered Time Integrators for Wave Equations,  SIAM J. Numerical Analysis 38(3) (2000), 718-741.
+
+\bibitem{MG}
+Ghrist, M., Reeger, J., and Fornberg, B.: Stability Ordinates of Adams Predictor-Corrector Methods, BIT Numerical Mathematics 55(3) (2015), 733-750.  DOI: 10.1007/s10543-014-0528-7
+
+\bibitem{SS}
+Strogatz, S., Nonlinear Dynamics and Chaos. Westview Press, Colorado (2015).
+
+\end{thebibliography}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{appendices}
+\chapter{Formal Proofs}
+\label{ch:proofs}
+\section{Proof of stability range for Problem 1}
+
+- explain how we can trace the outline of a stability domain \\
+- rho/sigma with $r= e^{i theta}$ \\
+- use Euler's identity ($e^{i /theta} = /cos{/theta} + i /sin{/theta} $) to convert from e -> trig \\
+- the a2 will cancel \\
+
+
+\section{Theory of Test ODE}
+
+- we take our problem 1 and cut the step size in half \\
+- this way we can find all of our necessary information to get started \\
+- the bottom level is initial conditions \\
+- run a normal rk3 on this \\
+
+
+% should I add the third column to the visual or no?
+\begin{picture}(160,100)
+    \put(0,60){\wbbox}
+    \put(3,63){\makebox(6,6){$X$}}
+    \put(0,40){\wbbox}
+    \put(3,43){\makebox(6,6){$X$}}
+    \put(0,20){\wbbox}
+    \put(3,23){\makebox(6,6){$X$}}
+    \put(30,57){\circle{14}}
+    \put(27,54){\makebox(6,6){$X$}}
+    \put(30,37){\circle{14}}
+    \put(27,34){\makebox(6,6){$X$}}
+    
+    \put(60,45){\vector(1,0){20}}
+    
+    \put(100,80){\wbbox}
+    \put(103,83){\makebox(6,6){$X$}}
+    \put(100,60){\wbbox}
+    \put(100,40){\wbbox}
+    \put(103,43){\makebox(6,6){$X$}}
+    \put(100,20){\wbbox}
+    \put(100,0){\wbbox}
+    \put(103,3){\makebox(6,6){$X$}}
+    \put(130,67){\circle{14}}
+    \put(127,64){\makebox(6,6){$X$}}
+    \put(130,47){\circle{14}}
+    \put(130,27){\circle{14}}
+    \put(127,24){\makebox(6,6){$X$}}
+    \put(130,7){\circle{14}}
+\end{picture}
+
+-from there we can extract pertinent information to run our method \\
+-our method utilizes a mesh of the y values and z values
+
+
+
+\chapter{MATLAB and Mathematica Code}
+\label{ch:tech}
+\section{MATLAB files}
+\subsection{myRK3.m}
+This is the custom RK3 we used to start the example ODE outline in Chapter \ref{subsec:testODE}. It is very similar to a normal RK3 but the implementation is slightly custom due to the restraints of \textit{MyTestODE.m}.
+
+\subsection{MyTestODE.m}
+This script is the actual test ODE which utilizes \textit{myRK3.m} and gets called by \textit{research3\_29.m} to print the results. It takes inputs of \textbf{exp}, the degree of the largest stepsize you would like to build up to, and \textbf{a2}, the free parameter, constrained by $-1<a_2\leq 1$. It first calls \textit{myRK3.m} on half of the actual stepsize and takes the relevant values from its return. Then we use a interwoven pair of matrices to store the y and derivative values. Finally, we return the error between our final approximation and the actual value.
+
+\subsection{research3\_29.m}
+This script calls \textit{MyTestODE.m} and calculates the error ratios displayed in Table \ref{table:ratios}. It also develops the error bound and displays the method on the same chart as the bound as seen in Figures \ref{fig:neg roundoff} and \ref{fig:pos roundoff}.
+
+\section{Mathematica files}
+\subsection{11\_3 Practicing.nb}
+This notebook generates the coefficients for Problem 1 and Problem 2 by expanding their corresponding Taylor polynomials. It also serves as a way to generate the coefficient for both Problem 1 and Problem 2's error terms. Finally, it provides a better image for the stability domain for Problem 1 because Mathematica keeps track of more significant digits than MATLAB.
+
+\subsection{Problem1\_and\_Problem2.nb}
+This notebook solves for the stable values of $a_2$ in Problem 1 and also solves for the ISB described in Equation \ref{eqn:p1isb}. We generate the stability domains again here for Problem 1. We also perform all of the corresponding computations for Problem 2.
+
+\subsection{Problem3.nb}
+This script solves for all of the coefficients of Problem 3. It also proves why we cannot have a 6th order method due to Section \ref{subsec:Dahl}. Finally, it provides the error coefficient for the local error.
+
+
+\end{appendices}
+\end{document}
